@@ -14,7 +14,7 @@ TCHAR* _serverInstanceName;
 bool _optionQuiet = false;
 
 // printf to stdout (if -q quiet option isn't specified)
-void log(const _bstr_t format, ...)
+void log(const TCHAR* format, ...)
 {
 	if (_optionQuiet)
 		return;
@@ -26,7 +26,7 @@ void log(const _bstr_t format, ...)
 }
 
 // printf to stdout (regardless of -q quiet option)
-void err(const _bstr_t format, ...)
+void err(const TCHAR* format, ...)
 {
 	va_list arglist;
 	va_start(arglist, format);
@@ -50,15 +50,16 @@ _bstr_t errorMessage(DWORD messageId)
 // Execute the given SQL against _serverInstanceName
 DWORD executeSql(TCHAR* sql)
 {
-	//log("\nexecuteSql '%s'\n", sql);
+	//log(L"\nexecuteSql '%s'\n", sql);
 	HRESULT hr;
 	
 	// Use '_Connection_Deprecated' interface for maximum MDAC compatibility
-	Connection15Ptr conn;
+	// BTW: Windows 7 SP1 introduced _Connection_Deprecated: http://social.msdn.microsoft.com/Forums/en/windowsgeneraldevelopmentissues/thread/3a4ce946-effa-4f77-98a6-34f11c6b5a13
+	_Connection_DeprecatedPtr conn;
 	hr = conn.CreateInstance(__uuidof(Connection));
 	if (FAILED(hr))
 	{
-		err("ADODB.Connection CreateInstance failed: %s", (TCHAR*)errorMessage(hr));
+		err(L"ADODB.Connection CreateInstance failed: %s", (TCHAR*)errorMessage(hr));
 		return hr;
 	}
 
@@ -70,43 +71,34 @@ DWORD executeSql(TCHAR* sql)
 	try
 	{
 		conn->ConnectionString = "Provider=SQLOLEDB; Data Source=" + serverName + "; Initial Catalog=master; Integrated Security=SSPI;";
-		//log("> Connect: %s\n", (TCHAR*)conn->ConnectionString);
+		//log(L"> Connect: %s\n", (TCHAR*)conn->ConnectionString);
 		conn->ConnectionTimeout = 25;
 		conn->Open("", "", "", adConnectUnspecified);
 	}
 	catch(_com_error e)
 	{
-		err("\nFailed to open connection to '" + serverName + L"': ");
-		err("%s [%s]\n", (TCHAR*)e.Description(), (TCHAR*)e.Source());
+		err(L"\nFailed to open connection to '" + serverName + L"': ");
+		err(L"%s [%s]\n", (TCHAR*)e.Description(), (TCHAR*)e.Source());
 		return e.Error();
 	}
 
 	try 
 	{	
-		log("> SQL: %s\n", sql);
+		//log(L"> SQL: %s\n", sql);
 		variant_t recordsAffected; 
 		conn->CommandTimeout = 0;
 
-		//conn->Execute(sql, &recordsAffected, adExecuteNoRecords);
-		_RecordsetPtr rs;
-		hr = conn->raw_Execute(sql, &recordsAffected, 0, &rs);
-		log("raw_Execute HR 0x%x\n", hr);
-		if (FAILED(hr))
-		{
-			err("Errors (%d):\n", conn->Errors->Count);
-			for (int i = 0; i < conn->Errors->Count; i++)
-			{
-				ErrorPtr error = conn->Errors->Item[i];
-				err(" * %s\n", (TCHAR*)error->Description);
-			}
-			return hr;
-		}
+		conn->Execute(sql, &recordsAffected, adExecuteNoRecords);
 
 		conn->Close();
 	}
 	catch(_com_error e)
 	{
-		err("\nQuery failed: '%s'\n%s [%s]\n", sql, (TCHAR*)e.Description(), (TCHAR*)e.Source());
+		err(L"\nQuery failed: '%s'\n\n%s [%s]\n", sql, (TCHAR*)e.Description(), (TCHAR*)e.Source());
+		//err(L"  Errors:\n", conn->Errors->Count);
+		//for (int i = 0; i < conn->Errors->Count; i++)
+		//	err(L"  - %s\n\n", (TCHAR*)conn->Errors->Item[i]->Description);
+
 		conn->Close();
 		return e.Error();
 	}
@@ -127,7 +119,7 @@ HRESULT performTransfer(IClientVirtualDevice* virtualDevice, FILE* backupfile)
 	//DWORD increment = 0;
 	while (SUCCEEDED (hr = virtualDevice->GetCommand(3 * 60 * 1000, &cmd)))
 	{
-		//log(">command %d, size %d\n", cmd->commandCode, cmd->size);
+		//log(L">command %d, size %d\n", cmd->commandCode, cmd->size);
 		bytesTransferred = 0;
 
 		switch (cmd->commandCode)
@@ -138,10 +130,10 @@ HRESULT performTransfer(IClientVirtualDevice* virtualDevice, FILE* backupfile)
 				bytesTransferred += fread(cmd->buffer + bytesTransferred, 1, cmd->size - bytesTransferred, backupfile);
 
 			totalBytes += bytesTransferred;
-			log("%d bytes read                               \r", totalBytes);
+			log(L"%d bytes read                               \r", totalBytes);
 			//if ((increment += bytesTransferred)> 1000000)
 			//{
-			//	log(".");
+			//	log(L".");
 			//	increment = 0;
 			//}
 
@@ -151,24 +143,24 @@ HRESULT performTransfer(IClientVirtualDevice* virtualDevice, FILE* backupfile)
 			break;
 
 		case VDC_Write:
-			//log("VDC_Write - size: %d\r\n", cmd->size);
+			//log(L"VDC_Write - size: %d\r\n", cmd->size);
 
 			while(bytesTransferred < cmd->size)
 				bytesTransferred += fwrite(cmd->buffer + bytesTransferred, 1, cmd->size - bytesTransferred, backupfile);
 
 			totalBytes += bytesTransferred;
 
-			log("%d bytes written\r", totalBytes);
+			log(L"%d bytes written\r", totalBytes);
 			completionCode = ERROR_SUCCESS;
 			break;
 
 		case VDC_Flush:
-			//log("\nVDC_Flush %d\n", cmd->size);
+			//log(L"\nVDC_Flush %d\n", cmd->size);
 			completionCode = ERROR_SUCCESS;
 			break;
 
 		case VDC_ClearError:
-			log("\nVDC_ClearError\n");
+			log(L"\nVDC_ClearError\n");
 			//Debug::WriteLine("VDC_ClearError");
 			completionCode = ERROR_SUCCESS;
 			break;
@@ -181,22 +173,22 @@ HRESULT performTransfer(IClientVirtualDevice* virtualDevice, FILE* backupfile)
 		hr = virtualDevice->CompleteCommand(cmd, completionCode, bytesTransferred, 0);
 		if (FAILED(hr))
 		{
-			err("\nvirtualDevice->CompleteCommand failed: %s\n", (TCHAR*)errorMessage(hr));
+			err(L"\nvirtualDevice->CompleteCommand failed: %s\n", (TCHAR*)errorMessage(hr));
 			return hr;
 		}
 	}
 
-	log("\n");
+	log(L"\n");
 
 	if (hr != VD_E_CLOSE)
 	{
-		err("virtualDevice->GetCommand failed: ");
+		err(L"virtualDevice->GetCommand failed: ");
 		if (hr == VD_E_TIMEOUT)
-			err(" timeout awaiting data.\n");
+			err(L" timeout awaiting data.\n");
 		else if (hr == VD_E_ABORT)
-			err(" transfer was aborted.\n");
+			err(L" transfer was aborted.\n");
 		else
-			err("%s\n", (TCHAR*)errorMessage(hr));
+			err(L"%s\n", (TCHAR*)errorMessage(hr));
 
 		return hr;
 	}
@@ -209,7 +201,7 @@ int _tmain(int argc, _TCHAR* argv[])
 {
 	if (argc < 3)
 	{
-		err("\n\
+		err(L"\n\
 Action and database required.\n\
 \n\
 Usage: sqlbak backup|restore <database> [options]\n\
@@ -242,7 +234,7 @@ Options:\n\
 		// Switching from apartment to multi-threaded is OK
 		if(hr != RPC_E_CHANGED_MODE)
 		{
-			err("CoInitializeEx failed: ", hr);
+			err(L"CoInitializeEx failed: ", hr);
 			return 1;
 		}
 	}
@@ -258,7 +250,7 @@ Options:\n\
 
 	if (FAILED(hr))
 	{
-		err("Could not create VDI component. Check registration of SQLVDI.DLL. %s\n", (TCHAR*)errorMessage(hr));
+		err(L"Could not create VDI component. Check registration of SQLVDI.DLL. %s\n", (TCHAR*)errorMessage(hr));
 		return 2;
 	}
 
@@ -273,18 +265,18 @@ Options:\n\
 	hr = virtualDeviceSet->CreateEx(_serverInstanceName, virtualDeviceName, &vdConfig);
 	if (!SUCCEEDED (hr))
 	{
-		err("IClientVirtualDeviceSet2.CreateEx failed\r\n");
+		err(L"IClientVirtualDeviceSet2.CreateEx failed\r\n");
 
 		switch(hr)
 		{
 		case VD_E_INSTANCE_NAME:
-			err("Didn't recognize the SQL Server instance name '"+ _bstr_t(_serverInstanceName) + L"'.\r\n");
+			err(L"Didn't recognize the SQL Server instance name '"+ _bstr_t(_serverInstanceName) + L"'.\r\n");
 			break;
 		case E_ACCESSDENIED:
-			err("Access Denied: You must be logged in as a Windows administrator to create virtual devices.\r\n");
+			err(L"Access Denied: You must be logged in as a Windows administrator to create virtual devices.\r\n");
 			break;
 		default:
-			err("%s\n", (TCHAR*)errorMessage(hr));
+			err(L"%s\n", (TCHAR*)errorMessage(hr));
 			break;
 		}
 		return 3;
@@ -308,7 +300,7 @@ Options:\n\
 	}
 	else 
 	{
-		err("Unsupported command '%s': only BACKUP or RESTORE are supported.\n", command);
+		err(L"Unsupported command '%s': only BACKUP or RESTORE are supported.\n", command);
 		return 1;
 	}
 
@@ -321,11 +313,11 @@ Options:\n\
 	hr = virtualDeviceSet->GetConfiguration(30000, &vdConfig);
 	if (FAILED(hr))
 	{
-		err("\n%s: virtualDeviceSet->GetConfiguration failed: ", command);
+		err(L"\n%s: virtualDeviceSet->GetConfiguration failed: ", command);
 		if (hr == VD_E_TIMEOUT)
-			err("Timed out waiting for backup to be initiated.\n");
+			err(L"Timed out waiting for backup to be initiated.\n");
 		else
-			err("%s\n", (TCHAR*)errorMessage(hr));
+			err(L"%s\n", (TCHAR*)errorMessage(hr));
 		return 3;
 	}
 
@@ -334,11 +326,11 @@ Options:\n\
 	hr = virtualDeviceSet->OpenDevice(virtualDeviceName, &virtualDevice);
 	if (FAILED(hr))
 	{
-		err("virtualDeviceSet->OpenDevice failed: 0x%x - ");
+		err(L"virtualDeviceSet->OpenDevice failed: 0x%x - ");
 		if (hr == VD_E_TIMEOUT)
-			err(" timeout.\n");
+			err(L" timeout.\n");
 		else
-			err(" %s.\n", (TCHAR*)errorMessage(hr));
+			err(L" %s.\n", (TCHAR*)errorMessage(hr));
 		return 4;
 	}
 
@@ -346,14 +338,14 @@ Options:\n\
 	_setmode(_fileno(backupFile), _O_BINARY);
 	hr = performTransfer(virtualDevice, backupFile);
 
-	log("\n%s: Waiting for backup thread to complete...\n", command);
 	WaitForSingleObject(executeSqlThread, 5000);
 
 	// Tidy up 
-	//CloseHandle(executeSqlThread);
+	CloseHandle(executeSqlThread);
 	virtualDeviceSet->Close();
 	virtualDevice->Release();
 	virtualDeviceSet->Release();
 
-	log("%s: Finished.\n", command);
+	//log(L"%s: Finished.\n", command);
+	return hr;
 }

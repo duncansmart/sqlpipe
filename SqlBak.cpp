@@ -39,8 +39,8 @@ _bstr_t errorMessage(DWORD messageId)
 	LPTSTR szMessage;
 	if (!FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, NULL, messageId, 0, (LPTSTR)&szMessage, 0, NULL))
 	{
-		szMessage = (LPTSTR)LocalAlloc(LPTR, 50);
-		_snwprintf(szMessage, sizeof(szMessage), L"Unknown error 0x%x.\n", messageId);		
+		szMessage = (LPTSTR)LocalAlloc(LPTR, 50 * sizeof(TCHAR));
+		_snwprintf(szMessage, 50 * sizeof(TCHAR), L"Unknown error 0x%x.\n", messageId);		
 	}
 	_bstr_t retval = szMessage;
 	LocalFree(szMessage);
@@ -177,8 +177,10 @@ HRESULT performTransfer(IClientVirtualDevice* virtualDevice, FILE* backupfile)
 		err("virtualDevice->GetCommand failed: ");
 		if (hr == VD_E_TIMEOUT)
 			err(" timeout awaiting data.\n");
+		else if (hr == VD_E_ABORT)
+			err(" transfer was aborted.\n");
 		else
-			err("$s\n", (TCHAR*)errorMessage(hr));
+			err("%s\n", (TCHAR*)errorMessage(hr));
 
 		return hr;
 	}

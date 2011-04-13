@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SqlBak", "SqlBak.vcxproj", "{DBDBF1E4-EBFB-4588-821A-9873C3679F81}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DBDBF1E4-EBFB-4588-821A-9873C3679F81}.Debug|Win32.ActiveCfg = Debug|Win32
+		{DBDBF1E4-EBFB-4588-821A-9873C3679F81}.Debug|Win32.Build.0 = Debug|Win32
+		{DBDBF1E4-EBFB-4588-821A-9873C3679F81}.Release|Win32.ActiveCfg = Release|Win32
+		{DBDBF1E4-EBFB-4588-821A-9873C3679F81}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

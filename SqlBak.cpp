@@ -54,7 +54,10 @@ DWORD executeSql(TCHAR* sql)
 	HRESULT hr;
 	
 	// Use '_Connection_Deprecated' interface for maximum MDAC compatibility
-	// BTW: Windows 7 SP1 introduced _Connection_Deprecated: http://social.msdn.microsoft.com/Forums/en/windowsgeneraldevelopmentissues/thread/3a4ce946-effa-4f77-98a6-34f11c6b5a13
+	// BTW: Windows 7 SP1 introduced _Connection_Deprecated: See:
+    //   http://social.msdn.microsoft.com/Forums/en/windowsgeneraldevelopmentissues/thread/3a4ce946-effa-4f77-98a6-34f11c6b5a13
+	// and 
+	//   http://support.microsoft.com/kb/2517589
 	_Connection_DeprecatedPtr conn;
 	hr = conn.CreateInstance(__uuidof(Connection));
 	if (FAILED(hr))
@@ -87,9 +90,7 @@ DWORD executeSql(TCHAR* sql)
 		//log(L"> SQL: %s\n", sql);
 		variant_t recordsAffected; 
 		conn->CommandTimeout = 0;
-
 		conn->Execute(sql, &recordsAffected, adExecuteNoRecords);
-
 		conn->Close();
 	}
 	catch(_com_error e)
@@ -116,7 +117,6 @@ HRESULT performTransfer(IClientVirtualDevice* virtualDevice, FILE* backupfile)
 	HRESULT         hr;
 	DWORD           totalBytes = 0;
 
-	//DWORD increment = 0;
 	while (SUCCEEDED (hr = virtualDevice->GetCommand(3 * 60 * 1000, &cmd)))
 	{
 		//log(L">command %d, size %d\n", cmd->commandCode, cmd->size);
@@ -131,11 +131,6 @@ HRESULT performTransfer(IClientVirtualDevice* virtualDevice, FILE* backupfile)
 
 			totalBytes += bytesTransferred;
 			log(L"%d bytes read                               \r", totalBytes);
-			//if ((increment += bytesTransferred)> 1000000)
-			//{
-			//	log(L".");
-			//	increment = 0;
-			//}
 
 			cmd->size = bytesTransferred;
 
@@ -307,7 +302,6 @@ Options:\n\
 	// Invoke backup on separate thread because virtualDeviceSet->GetConfiguration will block until "BACKUP DATABASE..."
 	DWORD threadId;
 	HANDLE executeSqlThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&executeSql, (TCHAR*)sql, 0, &threadId);
-	//executeSqlAsync(sql);
 		
 	// Ready...
 	hr = virtualDeviceSet->GetConfiguration(30000, &vdConfig);

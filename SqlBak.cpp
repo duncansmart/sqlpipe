@@ -54,7 +54,7 @@ DWORD executeSql(TCHAR* sql)
 	HRESULT hr;
 	
 	// Use '_Connection_Deprecated' interface for maximum MDAC compatibility
-	_Connection_DeprecatedPtr conn;
+	Connection15Ptr conn;
 	hr = conn.CreateInstance(__uuidof(Connection));
 	if (FAILED(hr))
 	{
@@ -70,7 +70,7 @@ DWORD executeSql(TCHAR* sql)
 	try
 	{
 		conn->ConnectionString = "Provider=SQLOLEDB; Data Source=" + serverName + "; Initial Catalog=master; Integrated Security=SSPI;";
-		//log(conn->ConnectionString);
+		//log("> Connect: %s\n", (TCHAR*)conn->ConnectionString);
 		conn->ConnectionTimeout = 25;
 		conn->Open("", "", "", adConnectUnspecified);
 	}
@@ -83,10 +83,25 @@ DWORD executeSql(TCHAR* sql)
 
 	try 
 	{	
-		//log("%s\n", (TCHAR*)sql);
+		log("> SQL: %s\n", sql);
 		variant_t recordsAffected; 
 		conn->CommandTimeout = 0;
-		conn->Execute(sql, &recordsAffected, adOptionUnspecified);
+
+		//conn->Execute(sql, &recordsAffected, adExecuteNoRecords);
+		_RecordsetPtr rs;
+		hr = conn->raw_Execute(sql, &recordsAffected, 0, &rs);
+		log("raw_Execute HR 0x%x\n", hr);
+		if (FAILED(hr))
+		{
+			err("Errors (%d):\n", conn->Errors->Count);
+			for (int i = 0; i < conn->Errors->Count; i++)
+			{
+				ErrorPtr error = conn->Errors->Item[i];
+				err(" * %s\n", (TCHAR*)error->Description);
+			}
+			return hr;
+		}
+
 		conn->Close();
 	}
 	catch(_com_error e)
@@ -98,6 +113,7 @@ DWORD executeSql(TCHAR* sql)
 
 	return 0;
 }
+
 
 // Transfer data from virtualDevice to backupfile or vice-versa
 HRESULT performTransfer(IClientVirtualDevice* virtualDevice, FILE* backupfile)
@@ -298,8 +314,9 @@ Options:\n\
 
 	// Invoke backup on separate thread because virtualDeviceSet->GetConfiguration will block until "BACKUP DATABASE..."
 	DWORD threadId;
-	HANDLE executeSqlThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&executeSql, sql, 0, &threadId);
-
+	HANDLE executeSqlThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&executeSql, (TCHAR*)sql, 0, &threadId);
+	//executeSqlAsync(sql);
+		
 	// Ready...
 	hr = virtualDeviceSet->GetConfiguration(30000, &vdConfig);
 	if (FAILED(hr))
@@ -329,15 +346,11 @@ Options:\n\
 	_setmode(_fileno(backupFile), _O_BINARY);
 	hr = performTransfer(virtualDevice, backupFile);
 
-	// Transferred, now wait for executeSql thread to complete
-	if (SUCCEEDED(hr))
-	{
-		log("\n%s: Waiting for backup thread to complete...\n", command);
-		WaitForSingleObject(executeSqlThread, 10000);
-	}
+	log("\n%s: Waiting for backup thread to complete...\n", command);
+	WaitForSingleObject(executeSqlThread, 5000);
 
 	// Tidy up 
-	CloseHandle(executeSqlThread);
+	//CloseHandle(executeSqlThread);
 	virtualDeviceSet->Close();
 	virtualDevice->Release();
 	virtualDeviceSet->Release();

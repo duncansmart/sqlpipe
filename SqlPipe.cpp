@@ -202,23 +202,29 @@ Action and database required.\n\
 Usage: sqlpipe backup|restore <database> [options]\n\
 Options:\n\
   -q Quiet, don't print messages to STDERR\n\
-  -i instancename\n");
+  -i \"instancename\"\n\
+  -f \"file\" Write/read file instead of STDOUT/STDIN\n");
 		return 1;
 	}
 
-	TCHAR* command = argv[1];
+	TCHAR* command = _wcslwr(argv[1]);
 	TCHAR* databaseName = argv[2];
+
+	TCHAR* filePath = NULL;
 
 	// Parse options
 	for (int i = 0; i < argc; i++)
 	{
-		
 		TCHAR* arg = _wcslwr(_wcsdup(argv[i]));
+
 		if (wcscmp(arg, L"-q") == 0)
 			_optionQuiet = true;
 
 		if (wcscmp(arg, L"-i") == 0)
 			_serverInstanceName = argv[i+1];
+
+		if (wcscmp(arg, L"-f") == 0)
+			filePath = argv[i+1];
 
 		free(arg);
 	}
@@ -278,20 +284,40 @@ Options:\n\
 	}
 
 	TCHAR* sql;
-	FILE* backupFile;
-	if (_wcsicmp(command, L"backup") == 0)
+	FILE* backupFile = NULL;
+	if (wcscmp(command, L"backup") == 0)
 	{
 		sql = "BACKUP DATABASE [" + _bstr_t(databaseName) + "] TO VIRTUAL_DEVICE = '" + virtualDeviceName + "'";
-		backupFile = stdout;
+		if (filePath == NULL)
+			backupFile = stdout;
+		else
+		{
+			backupFile = _wfopen(filePath, L"w");
+			if (backupFile == NULL)
+			{
+				err(L"Error creating '%s': %s\n", filePath, _wcserror(errno));
+				return errno;
+			}
+		}
 	}
-	else if(_wcsicmp(command, L"restore") == 0)
+	else if(wcscmp(command, L"restore") == 0)
 	{
 		hr = executeSql("CREATE DATABASE ["+ _bstr_t(databaseName) +"]");
 		if (FAILED(hr))
 			return hr;
 
 		sql = "RESTORE DATABASE [" + _bstr_t(databaseName) + "] FROM VIRTUAL_DEVICE = '" + virtualDeviceName + "' WITH REPLACE";
-		backupFile = stdin;
+		if (filePath == NULL)
+			backupFile = stdin;
+		else
+		{
+			backupFile = _wfopen(filePath, L"r");
+			if (backupFile == NULL)
+			{
+				err(L"Error opening '%s': %s\n", filePath, _wcserror(errno));
+				return errno;
+			}
+		}
 	}
 	else 
 	{
@@ -299,9 +325,10 @@ Options:\n\
 		return 1;
 	}
 
+	
 	// Invoke backup on separate thread because virtualDeviceSet->GetConfiguration will block until "BACKUP DATABASE..."
 	DWORD threadId;
-	HANDLE executeSqlThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&executeSql, (TCHAR*)sql, 0, &threadId);
+	HANDLE executeSqlThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&executeSql, sql, 0, &threadId);
 		
 	// Ready...
 	hr = virtualDeviceSet->GetConfiguration(30000, &vdConfig);
@@ -329,7 +356,7 @@ Options:\n\
 	}
 
 	// Go
-	_setmode(_fileno(backupFile), _O_BINARY);
+	_setmode(_fileno(backupFile), _O_BINARY); //ensure \n's in STDOUT don't get tampered with
 	hr = performTransfer(virtualDevice, backupFile);
 
 	WaitForSingleObject(executeSqlThread, 5000);

@@ -8,6 +8,7 @@ A command-line utilty that does local SQL Server backups/restores to STDOUT/STDI
     Options:
       -q Quiet, don't print messages to STDERR
       -i "instancename"
+      -f "file" Write/read file instead of STDOUT/STDIN
 
 ## Examples ##
 
@@ -15,7 +16,7 @@ Basic backup:
 
     sqlpipe backup AdventureWorks > AdventureWorks.bak
 
-Backup with named intance SQLEXPRESS:
+Backup from named instance SQLEXPRESS:
 
     sqlpipe backup AdventureWorks -i SQLEXPRESS > AdventureWorks.bak
 
@@ -37,11 +38,19 @@ Restore gzip compressed database (assumes 7-Zip's 7z.exe is in `%PATH%`):
 
 ## Remote SQL Servers ##
 
-SqlPipe itself can only connect to a local SQL Server, but by using something like Sysinternals' PSExec you can execute it remotely like so:
+SqlPipe itself can only connect to a local SQL Server, but by using something like [Sysinternals PSExec](http://technet.microsoft.com/en-us/sysinternals/bb897553) you can execute it remotely like so:
 
-    psexec \\myserver -c sqlpipe backup AdventureWorks > C:\Backups\AdventureWorks.bak
+    psexec \\dbserver -cv sqlpipe backup AdventureWorks > C:\Backups\AdventureWorks.bak
     
-Note that in this example that `C:\Backups\Inventory.bak` refers to a location on *your* machine not the remote server. Yes, the backup data was piped over the network!
+Note that in this example that `C:\Backups\Inventory.bak` refers to a location on *your* machine not the remote server. Yes, the backup data was piped over the network! 
+
+To write to a remote file locaton use the `-f` option:
+
+    psexec \\dbserver -cv sqlpipe backup AdventureWorks -f C:\Backups\AdventureWorks.bak
+
+Or a central network location:
+
+    psexec \\dbserver -u domain\user -p P@55w0rd -cv sqlpipe backup AdventureWorks -f \\fileserver\Backups\AdventureWorks.bak
 
 ## Implementation details ##
 

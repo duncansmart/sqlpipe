@@ -1,4 +1,4 @@
-// SqlBak.cpp : Defines the entry point for the console application.
+// SqlPipe.cpp : Defines the entry point for the console application.
 //
 
 #include "stdafx.h"
@@ -199,7 +199,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		err(L"\n\
 Action and database required.\n\
 \n\
-Usage: sqlbak backup|restore <database> [options]\n\
+Usage: sqlpipe backup|restore <database> [options]\n\
 Options:\n\
   -q Quiet, don't print messages to STDERR\n\
   -i instancename\n");

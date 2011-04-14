@@ -1,5 +1,5 @@
 // stdafx.cpp : source file that includes just the standard includes
-// SqlBak.pch will be the pre-compiled header
+// SqlPipe.pch will be the pre-compiled header
 // stdafx.obj will contain the pre-compiled type information
 
 #include "stdafx.h"

@@ -1,10 +1,10 @@
-# SqlBak: command-line SQL Server backup utility #
+# SqlPipe: command-line SQL Server backup utility #
 
 A command-line utilty that does backups/restores to STDOUT/STDIN.
 
 ## Usage ##
 
-    sqlbak backup|restore "database" [options]
+    sqlpipe backup|restore "database" [options]
     Options:
       -q Quiet, don't print messages to STDERR
       -i "instancename"
@@ -13,27 +13,27 @@ A command-line utilty that does backups/restores to STDOUT/STDIN.
 
 Basic backup:
 
-    sqlbak backup AdventureWorks > AdventureWorks.bak
+    sqlpipe backup AdventureWorks > AdventureWorks.bak
 
 Backup with named intance SQLEXPRESS:
 
-    sqlbak backup AdventureWorks -i SQLEXPRESS > AdventureWorks.bak
+    sqlpipe backup AdventureWorks -i SQLEXPRESS > AdventureWorks.bak
 
 Basic Restore:
 
-    sqlbak restore AdventureWorks < AdventureWorks.bak
+    sqlpipe restore AdventureWorks < AdventureWorks.bak
 
 Duplicate a database:
 
-    sqlbak backup AdventureWorks | sqlbak restore AdventureWorks_Copy
+    sqlpipe backup AdventureWorks | sqlpipe restore AdventureWorks_Copy
 
 Backup with gzip compression (assumes 7-Zip's 7z.exe is in `%PATH%`):
 
-    sqlbak backup AdventureWorks | 7z a -si AdventureWorks.gz
+    sqlpipe backup AdventureWorks | 7z a -si AdventureWorks.gz
 
 Restore gzip compressed database (assumes 7-Zip's 7z.exe is in `%PATH%`):
 
-    7z e -so AdventureWorks.gz | sqlbak restore AdventureWorks
+    7z e -so AdventureWorks.gz | sqlpipe restore AdventureWorks
 
 ## Implementation details ##
 

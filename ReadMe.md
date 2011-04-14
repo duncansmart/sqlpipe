@@ -1,6 +1,6 @@
 # SqlPipe: command-line SQL Server backup utility #
 
-A command-line utilty that does backups/restores to STDOUT/STDIN.
+A command-line utilty that does local SQL Server backups/restores to STDOUT/STDIN. 
 
 ## Usage ##
 
@@ -34,6 +34,14 @@ Backup with gzip compression (assumes 7-Zip's 7z.exe is in `%PATH%`):
 Restore gzip compressed database (assumes 7-Zip's 7z.exe is in `%PATH%`):
 
     7z e -so AdventureWorks.gz | sqlpipe restore AdventureWorks
+
+## Remote SQL Servers ##
+
+SqlPipe itself can only connect to a local SQL Server, but by using something like Sysinternals' PSExec you can execute it remotely like so:
+
+    psexec \\myserver -c sqlpipe backup AdventureWorks > C:\Backups\AdventureWorks.bak
+    
+Note that in this example that `C:\Backups\Inventory.bak` refers to a location on *your* machine not the remote server. Yes, the backup data was piped over the network!
 
 ## Implementation details ##
 

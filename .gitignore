@@ -6,3 +6,4 @@
 *.opensdf
 *.suo
 *.user
+/bin

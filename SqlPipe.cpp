@@ -58,7 +58,7 @@ DWORD executeSql(TCHAR* sql)
     //   http://social.msdn.microsoft.com/Forums/en/windowsgeneraldevelopmentissues/thread/3a4ce946-effa-4f77-98a6-34f11c6b5a13
 	// and 
 	//   http://support.microsoft.com/kb/2517589
-	_Connection_DeprecatedPtr conn;
+	_ConnectionPtr conn;
 	hr = conn.CreateInstance(__uuidof(Connection));
 	if (FAILED(hr))
 	{
@@ -105,6 +105,61 @@ DWORD executeSql(TCHAR* sql)
 	}
 
 	return 0;
+}
+
+
+_RecordsetPtr executeRecordset(TCHAR* sql)
+{
+	HRESULT hr;
+	
+	_ConnectionPtr conn;
+	hr = conn.CreateInstance(__uuidof(Connection));
+	if (FAILED(hr))
+	{
+		err(L"ADODB.Connection CreateInstance failed: %s", (TCHAR*)errorMessage(hr));
+		return hr;
+	}
+
+	// "lpc:..." ensures shared memory...
+	_bstr_t serverName = "lpc:.";
+	if (_serverInstanceName != NULL)
+		serverName += "\\" + _bstr_t(_serverInstanceName);
+
+	try
+	{
+		conn->ConnectionString = "Provider=SQLOLEDB; Data Source=" + serverName + "; Initial Catalog=master; Integrated Security=SSPI;";
+		//log(L"> Connect: %s\n", (TCHAR*)conn->ConnectionString);
+		conn->ConnectionTimeout = 25;
+		conn->Open("", "", "", adConnectUnspecified);
+	}
+	catch(_com_error e)
+	{
+		err(L"\nFailed to open connection to '" + serverName + L"': ");
+		err(L"%s [%s]\n", (TCHAR*)e.Description(), (TCHAR*)e.Source());
+		return NULL;
+	}
+
+	try 
+	{	
+		//log(L"> SQL: %s\n", sql);
+		variant_t recordsAffected; 
+		conn->CommandTimeout = 0;
+		_RecordsetPtr recordset = conn->Execute(sql, &recordsAffected, adExecuteNoRecords);
+		conn->Close();
+        return recordset;
+	}
+	catch(_com_error e)
+	{
+		err(L"\nQuery failed: '%s'\n\n%s [%s]\n", sql, (TCHAR*)e.Description(), (TCHAR*)e.Source());
+		//err(L"  Errors:\n", conn->Errors->Count);
+		//for (int i = 0; i < conn->Errors->Count; i++)
+		//	err(L"  - %s\n\n", (TCHAR*)conn->Errors->Item[i]->Description);
+
+		conn->Close();
+        return NULL;
+	}
+
+	return NULL;
 }
 
 
@@ -191,6 +246,90 @@ HRESULT performTransfer(IClientVirtualDevice* virtualDevice, FILE* backupfile)
 	return NOERROR;
 }
 
+int mountAndTransferVirtualDevice(TCHAR *command, HRESULT &hr, TCHAR virtualDeviceName[39], TCHAR *sql, FILE *backupFile)
+{
+    // Create Device Set
+    IClientVirtualDeviceSet2 * virtualDeviceSet;
+    hr = CoCreateInstance(
+        CLSID_MSSQL_ClientVirtualDeviceSet,
+        NULL,
+        CLSCTX_INPROC_SERVER,
+        IID_IClientVirtualDeviceSet2,
+        (void**)&virtualDeviceSet);
+
+    if (FAILED(hr))
+    {
+        err(L"Could not create VDI component. Check registration of SQLVDI.DLL. %s\n", (TCHAR*)errorMessage(hr));
+        return 2;
+    }
+
+    // Create Device
+    VDConfig vdConfig = {0};
+    vdConfig.deviceCount = 1;
+    hr = virtualDeviceSet->CreateEx(_serverInstanceName, virtualDeviceName, &vdConfig);
+    if (!SUCCEEDED (hr))
+    {
+        err(L"IClientVirtualDeviceSet2.CreateEx failed\r\n");
+
+        switch(hr)
+        {
+        case VD_E_INSTANCE_NAME:
+            err(L"Didn't recognize the SQL Server instance name '"+ _bstr_t(_serverInstanceName) + L"'.\r\n");
+            break;
+        case E_ACCESSDENIED:
+            err(L"Access Denied: You must be logged in as a Windows administrator to create virtual devices.\r\n");
+            break;
+        default:
+            err(L"%s\n", (TCHAR*)errorMessage(hr));
+            break;
+        }
+        return 3;
+    }
+
+
+    // Invoke backup on separate thread because virtualDeviceSet->GetConfiguration will block until "BACKUP DATABASE..."
+    DWORD threadId;
+    HANDLE executeSqlThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&executeSql, sql, 0, &threadId);
+
+    // Ready...
+    hr = virtualDeviceSet->GetConfiguration(30000, &vdConfig);
+    if (FAILED(hr))
+    {
+        err(L"\n%s: virtualDeviceSet->GetConfiguration failed: ", command);
+        if (hr == VD_E_TIMEOUT)
+            err(L"Timed out waiting for backup to be initiated.\n");
+        else
+            err(L"%s\n", (TCHAR*)errorMessage(hr));
+        return 3;
+    }
+
+    // Steady...
+    IClientVirtualDevice *virtualDevice = NULL;
+    hr = virtualDeviceSet->OpenDevice(virtualDeviceName, &virtualDevice);
+    if (FAILED(hr))
+    {
+        err(L"virtualDeviceSet->OpenDevice failed: 0x%x - ");
+        if (hr == VD_E_TIMEOUT)
+            err(L" timeout.\n");
+        else
+            err(L" %s.\n", (TCHAR*)errorMessage(hr));
+        return 4;
+    }
+
+    // Go
+    _setmode(_fileno(backupFile), _O_BINARY); //ensure \n's in STDOUT don't get tampered with
+    hr = performTransfer(virtualDevice, backupFile);
+
+    WaitForSingleObject(executeSqlThread, 5000);
+
+    // Tidy up
+    CloseHandle(executeSqlThread);
+    virtualDeviceSet->Close();
+    virtualDevice->Release();
+    virtualDeviceSet->Release();
+    return 0;
+}
+
 // Entry point
 int _tmain(int argc, _TCHAR* argv[])
 {
@@ -240,48 +379,10 @@ Options:\n\
 		}
 	}
 
-	// Create Device Set
-	IClientVirtualDeviceSet2 * virtualDeviceSet;
-	hr = CoCreateInstance( 
-		CLSID_MSSQL_ClientVirtualDeviceSet,  
-		NULL, 
-		CLSCTX_INPROC_SERVER,
-		IID_IClientVirtualDeviceSet2,
-		(void**)&virtualDeviceSet);
-
-	if (FAILED(hr))
-	{
-		err(L"Could not create VDI component. Check registration of SQLVDI.DLL. %s\n", (TCHAR*)errorMessage(hr));
-		return 2;
-	}
-
-	// Generate virtualDeviceName
+    // Generate virtualDeviceName
 	TCHAR virtualDeviceName[39];
 	GUID guid; CoCreateGuid(&guid);	
 	StringFromGUID2(guid, virtualDeviceName, sizeof(virtualDeviceName));
-
-	// Create Device
-	VDConfig vdConfig = {0};
-	vdConfig.deviceCount = 1;
-	hr = virtualDeviceSet->CreateEx(_serverInstanceName, virtualDeviceName, &vdConfig);
-	if (!SUCCEEDED (hr))
-	{
-		err(L"IClientVirtualDeviceSet2.CreateEx failed\r\n");
-
-		switch(hr)
-		{
-		case VD_E_INSTANCE_NAME:
-			err(L"Didn't recognize the SQL Server instance name '"+ _bstr_t(_serverInstanceName) + L"'.\r\n");
-			break;
-		case E_ACCESSDENIED:
-			err(L"Access Denied: You must be logged in as a Windows administrator to create virtual devices.\r\n");
-			break;
-		default:
-			err(L"%s\n", (TCHAR*)errorMessage(hr));
-			break;
-		}
-		return 3;
-	}
 
 	TCHAR* sql;
 	FILE* backupFile = NULL;
@@ -306,6 +407,19 @@ Options:\n\
 		if (FAILED(hr))
 			return hr;
 
+        _RecordsetPtr fileList = executeRecordset("RESTORE FILELISTONLY FROM VIRTUAL_DEVICE = '" + _bstr_t(virtualDeviceName) + "'");
+        _bstr_t restoreSql("RESTORE DATABASE [" + _bstr_t(databaseName) + "] FROM VIRTUAL_DEVICE = '" + virtualDeviceName + "' WITH");
+        while(!fileList->EndOfFile)
+        {
+            _bstr_t fileType(fileList->Fields->GetItem("Type")->Value);
+            _bstr_t logicalName = fileList->Fields->GetItem("LogicalName")->Value;
+            restoreSql += " MOVE '" + logicalName + "' TO 'C:\\temp\\foo\\" +  logicalName + ".xdf'";
+            fileList->MoveNext();
+        }
+        err(restoreSql);
+
+        hr = mountAndTransferVirtualDevice(command, hr, virtualDeviceName, sql, backupFile);
+
 		sql = "RESTORE DATABASE [" + _bstr_t(databaseName) + "] FROM VIRTUAL_DEVICE = '" + virtualDeviceName + "' WITH REPLACE";
 		if (filePath == NULL)
 			backupFile = stdin;
@@ -325,47 +439,7 @@ Options:\n\
 		return 1;
 	}
 
-	
-	// Invoke backup on separate thread because virtualDeviceSet->GetConfiguration will block until "BACKUP DATABASE..."
-	DWORD threadId;
-	HANDLE executeSqlThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&executeSql, sql, 0, &threadId);
-		
-	// Ready...
-	hr = virtualDeviceSet->GetConfiguration(30000, &vdConfig);
-	if (FAILED(hr))
-	{
-		err(L"\n%s: virtualDeviceSet->GetConfiguration failed: ", command);
-		if (hr == VD_E_TIMEOUT)
-			err(L"Timed out waiting for backup to be initiated.\n");
-		else
-			err(L"%s\n", (TCHAR*)errorMessage(hr));
-		return 3;
-	}
-
-	// Steady...
-	IClientVirtualDevice *virtualDevice = NULL;
-	hr = virtualDeviceSet->OpenDevice(virtualDeviceName, &virtualDevice);
-	if (FAILED(hr))
-	{
-		err(L"virtualDeviceSet->OpenDevice failed: 0x%x - ");
-		if (hr == VD_E_TIMEOUT)
-			err(L" timeout.\n");
-		else
-			err(L" %s.\n", (TCHAR*)errorMessage(hr));
-		return 4;
-	}
-
-	// Go
-	_setmode(_fileno(backupFile), _O_BINARY); //ensure \n's in STDOUT don't get tampered with
-	hr = performTransfer(virtualDevice, backupFile);
-
-	WaitForSingleObject(executeSqlThread, 5000);
-
-	// Tidy up 
-	CloseHandle(executeSqlThread);
-	virtualDeviceSet->Close();
-	virtualDevice->Release();
-	virtualDeviceSet->Release();
+    hr = mountAndTransferVirtualDevice(command, hr, virtualDeviceName, sql, backupFile);
 
 	//log(L"%s: Finished.\n", command);
 	return hr;

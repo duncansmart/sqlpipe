@@ -1,14 +1,16 @@
 # SqlPipe: command-line SQL Server backup utility #
 
-A command-line utilty that does local SQL Server backups/restores to STDOUT/STDIN. 
+A command-line utilty that does local SQL Server backups to STDOUT/STDIN. 
 
 ## Usage ##
 
-    sqlpipe backup|restore "database" [options]
+    sqlpipe backup "database" [options]
     Options:
       -q Quiet, don't print messages to STDERR
       -i "instancename"
       -f "file" Write/read file instead of STDOUT/STDIN
+
+**NOTE: restore currently does not work**
 
 ## Examples ##
 
@@ -20,21 +22,9 @@ Backup from named instance SQLEXPRESS:
 
     sqlpipe backup AdventureWorks -i SQLEXPRESS > AdventureWorks.bak
 
-Basic Restore:
-
-    sqlpipe restore AdventureWorks < AdventureWorks.bak
-
-Duplicate a database:
-
-    sqlpipe backup AdventureWorks | sqlpipe restore AdventureWorks_Copy
-
 Backup with gzip compression (assumes 7-Zip's 7z.exe is in `%PATH%`):
 
     sqlpipe backup AdventureWorks | 7z a -si AdventureWorks.gz
-
-Restore gzip compressed database (assumes 7-Zip's 7z.exe is in `%PATH%`):
-
-    7z e -so AdventureWorks.gz | sqlpipe restore AdventureWorks
 
 ## Remote SQL Servers ##
 

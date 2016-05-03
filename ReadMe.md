@@ -52,6 +52,10 @@ Or a central network location:
 
     psexec \\dbserver -u domain\user -p P@55w0rd -cv sqlpipe backup AdventureWorks -f \\fileserver\Backups\AdventureWorks.bak
 
+## Download ##
+
+See https://github.com/duncansmart/sqlpipe/releases
+
 ## Implementation details ##
 
 Uses SQL Server's Virtual Backup Device Interface as detailed in the [SQL Server 2005 Virtual Backup Device Interface (VDI) Specification](http://www.microsoft.com/downloads/en/details.aspx?familyid=416f8a51-65a3-4e8e-a4c8-adfe15e850fc). It's not a million miles away from the `simple.cpp` example there.
